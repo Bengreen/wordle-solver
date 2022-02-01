@@ -1,17 +1,12 @@
 
-use std::collections::{HashMap, HashSet};
-use std::error::Error;
+use std::collections::{ HashSet};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
-use std::ops::RangeBounds;
 use std::path::Path;
 use std::hash::Hash;
 use itertools::{Itertools, izip};
 use std::ops;
 use rayon::prelude::*;
-use text_io::read;
-
-use std::{iter::Map, cmp::Reverse};
 
 
 fn validate_set<C>(inc: &HashSet<C>, exc: &HashSet<C>) -> bool
@@ -85,24 +80,6 @@ fn score(words: &Vec<String>, response: &SResponse) -> Vec<(String, Score,)> {
 
   }
 
-fn top_matches(scored: &Vec<(String, usize, usize, usize,)>, guesses: usize) -> Vec<(String, usize, usize,usize,)> {
-    scored.clone().into_iter()
-        .sorted_by_key(|v| Reverse(v.1))
-        .take(guesses)
-        .collect_vec()
-}
-fn top_correct(scored: &Vec<(String, usize, usize, usize,)>, guesses: usize) -> Vec<(String, usize, usize,usize,)> {
-    scored.clone().into_iter()
-        .sorted_by_key(|v| Reverse(v.2))
-        .take(guesses)
-        .collect_vec()
-}
-fn top_rejected(scored: &Vec<(String, usize, usize, usize,)>, guesses: usize) -> Vec<(String, usize, usize, usize,)> {
-    scored.clone().into_iter()
-        .sorted_by_key(|v| Reverse(v.3))
-        .take(guesses)
-        .collect_vec()
-}
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 struct Guess{
@@ -389,65 +366,6 @@ mod tests0 {
 }
 
 
-
-
-
-
-#[derive(PartialEq, Eq, Debug)]
-struct Response{
-    correct: String,
-    inc: String,
-    exc: String,
-    neg_locate: Vec<String>
-}
-impl Response {
-    fn new(correct: &str, inc: &str, exc: &str, neg_locate: Vec<String>) -> Response {
-        Response { correct: correct.to_string(), inc: inc.to_string(), exc: exc.to_string(), neg_locate: neg_locate}
-    }
-
-    // Return score of correct matches and of number of characters matched
-    fn score(self) -> (usize, usize) {
-        (self.correct.chars().filter(|l| *l != ' ').count(), self.inc.len())
-    }
-}
-
-/// check the guess and return a response object to describe the match/reject
-fn check_guess(target: &str, guess: &str) -> Response {
-    if target.len() != guess.len() {
-        panic!("Target and guess but be same length");
-    }
-    let inc: String = guess.chars().filter(|g| target.contains(*g)).unique().sorted().collect();
-    let correct: String = target.chars().zip(guess.chars()).map(|(t,g)| if t == g {t} else {' '}  ).collect();
-    let mut neg_exists = false;
-    let neg_locate: String = guess.chars().zip(correct.chars()).map(|(g,c)| if inc.contains(g) && g != c {neg_exists=true;g} else {' '}).collect();
-    Response{
-        correct: correct.clone(),
-        inc: inc.clone(),
-        exc: guess.chars().filter(|g| !target.contains(*g)).unique().sorted().collect(),
-        neg_locate: if neg_exists {vec!(neg_locate)} else {Vec::new()}
-    }
-}
-
-impl ops::Add<&Response> for Response {
-    type Output = Self;
-
-    fn add(self, rhs: &Response) -> Response {
-        if self.correct.len() != rhs.correct.len() {
-            panic!("lhs and rhs but be same length");
-        }
-
-        Response{
-            correct: self.correct.chars().zip(rhs.correct.chars()).map(|(l, r)| if l == ' ' {r} else {l}).collect(),
-            inc: (self.inc + &rhs.inc).chars().unique().sorted().collect(),
-            exc: (self.exc + &rhs.exc).chars().unique().sorted().collect(),
-            neg_locate: {
-                let mut neg_locate = self.neg_locate.clone();
-                neg_locate.extend(rhs.neg_locate.clone());
-                neg_locate
-            }
-        }
-    }
-}
 static WORD_LENGTH: usize = 5;
 
 fn input_response() -> Result<SResponse, &'static str> {
@@ -554,7 +472,7 @@ fn main() {
         println!("There are {} lines in file", words.len());
         let mut response = SResponse::new(&vec!());
 
-        while(true) {
+        loop {
 
             match input_response() {
                 Ok(ir) => response = response+&ir,
