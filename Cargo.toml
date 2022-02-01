@@ -8,4 +8,3 @@ edition = "2021"
 [dependencies]
 itertools = "~0.10.0"
 rayon = "~1.5"
-text_io = "~0.1.9"
