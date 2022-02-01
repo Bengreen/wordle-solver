@@ -28,64 +28,63 @@ where
     validate_set(&HashSet::from_iter(inc), &HashSet::from_iter(exc))
 }
 
-fn subset_words(words: &[String], response: &Response) -> Vec<String>
+fn subset_words(words: &[String], response: &SResponse) -> Vec<String>
 {
-    // inc: &[char], exc: &[char]
-    let p : Vec<_> = words.iter().filter(|&word|
-        {
-            if response.exc.chars().any(|letter| word.contains(letter) ) {
-                return false;
-            }
-            if !response.inc.chars().all(|letter| word.contains(letter)) {
-                return false;
-            }
-            if !word.chars().zip(response.correct.chars()).all(|(w,c)|  c == ' ' || w == c) {
-                return false;
-            }
-            response.neg_locate.iter().all(|neg| neg.chars().zip(word.chars()).all(|(n,w)| n == ' ' || n != w))
-            // if neg_locate do not match
-            // true
-        }
-        // if word includes value in exc then false
-        // if word !include all value in inc then false
-        // else true
+    words.iter().filter(|&word|
+        response.check(word)
+    ).cloned().collect()
+}
+#[derive(Debug)]
+struct Score{
+    inc_letters: usize,
+    exc_letters: usize,
+    green: usize,
+    rejected_words: usize,
+}
+impl ops::Add<&Score> for Score {
+    type Output = Self;
 
-    // true
-    ).cloned().collect();
-    // words.to_vec()
-    p
+    fn add(self, rhs: &Score) -> Score {
+        Score{inc_letters: self.inc_letters+rhs.inc_letters, exc_letters: self.exc_letters+rhs.exc_letters, green: self.green+rhs.green, rejected_words: self.rejected_words+rhs.rejected_words}
+    }
 }
 
 /// Return a score for all words as used to split/solve the list of active words (worked out from Response)
-fn score(words: &Vec<String>, response: &Response) -> Vec<(String, usize, usize,usize,)> {
+fn score(words: &Vec<String>, response: &SResponse) -> Vec<(String, Score,)> {
     let active_words = subset_words(&words, response);
     println!("There are {} valid words left", active_words.len());
+
+    if active_words.len() < 20 {
+        println!("Active words: {:?}", active_words);
+    }
 
     // Use all words as viable guesses
     words.par_iter()
         .map(
             |guess_word| {
-                let mut correct_tot = 0;
-                let mut matches_tot = 0;
-                let mut rejected_tot = 0;
+                let mut total = Score{inc_letters: 0, exc_letters: 0,green: 0 ,rejected_words: 0};
 
                 // For each target word score it based on
                 for target_word in &active_words {
-                    let potential_response = check_guess(&target_word, &guess_word) + response;
+                    let potential_response = SResponse::new(&vec!(Guess::from_target(target_word, guess_word)))+response;
                     let reduced_words = subset_words(&active_words, &potential_response);
 
-                    let (correct, matches) = potential_response.score();
-                    // panic!("Testing {} and {} to score {}  and {}", target_word, )
-                    correct_tot += correct;
-                    matches_tot += matches;
-                    rejected_tot += active_words.len()-reduced_words.len();
+                    let score = Score{
+                        inc_letters: potential_response.inc.len(),
+                        exc_letters: potential_response.exc.len(),
+                        green: potential_response.green_count(),
+                        rejected_words: active_words.len()-reduced_words.len(),
+                    };
+
+                    total= total + &score;
                 };
-            (guess_word.to_string(), correct_tot, matches_tot, rejected_tot)
+            (guess_word.to_string(), total)
             }
         )
         .collect()
 
   }
+
 fn top_matches(scored: &Vec<(String, usize, usize, usize,)>, guesses: usize) -> Vec<(String, usize, usize,usize,)> {
     scored.clone().into_iter()
         .sorted_by_key(|v| Reverse(v.1))
@@ -113,6 +112,18 @@ struct Guess{
 impl Guess{
     fn new(guess: &str, reply: &str) -> Guess {
         Guess { guess: guess.to_string(), reply: reply.to_string()}
+    }
+    fn from_target(target: &str, guess: &str) -> Guess {
+        let reply = target.chars().zip(guess.chars()).map(|(t, g)| {
+            if t==g {
+                'g'
+            } else if target.contains(g) {
+                'y'
+            } else {
+                'b'
+            }
+        }).collect();
+        Guess{guess: guess.to_string(), reply: reply}
     }
     fn inc(&self) -> String {
         izip!(self.guess.chars(), self.reply.chars()).filter_map(|(g,r)| if r == 'g' || r=='y'  {Some(g)} else {None} ).unique().collect()
@@ -157,6 +168,19 @@ impl SResponse {
         self.exc.chars().all(|e| !word.contains(e)) &&
         self.inc.chars().all(|i| word.contains(i)) &&
         self.guesses.iter().all(|guess| guess.yg_check(word))
+    }
+    fn green(&self) -> String {
+        if self.guesses.len() == 0 {
+            return "".to_string()
+        }
+        if self.guesses[0].guess.len() == 0 {
+            return "".to_string()
+        }
+        let init = " ".repeat(self.guesses[0].guess.len());
+        self.guesses.iter().fold(init, |acc, guess| izip!(acc.chars(), guess.reply.chars(), guess.guess.chars()).map(|(a,r,g)| if r=='g' {g} else {a} ).collect())
+    }
+    fn green_count(&self) -> usize {
+        self.green().chars().filter(|l| *l != ' ').count()
     }
 }
 
@@ -367,11 +391,6 @@ mod tests0 {
 
 
 
-struct Score{
-    word: String,
-    correct_tot: usize,
-    present_tot: usize
-}
 
 
 #[derive(PartialEq, Eq, Debug)]
@@ -431,7 +450,7 @@ impl ops::Add<&Response> for Response {
 }
 static WORD_LENGTH: usize = 5;
 
-fn input_response() -> Result<Response, &'static str> {
+fn input_response() -> Result<SResponse, &'static str> {
     let mut line = String::new();
     println!("What is your guess");
     let readsize = std::io::stdin().read_line(&mut line).unwrap();
@@ -448,25 +467,20 @@ fn input_response() -> Result<Response, &'static str> {
         return Err("Invalid size of matches");
     }
     line.pop();
-    let matches = line.clone();
+    let reply = line.clone();
 
-    for c in matches.chars() {
+    for c in reply.chars() {
         if ! "bgy".contains(c) {
             return Err("incorrect match char. Must be one of gby");
         }
     }
-    let exc: String = guess.chars().zip(matches.chars()).filter_map(|(g, m)| if m == 'b' {Some(g)} else {None} ).collect();
-    let inc: String = guess.chars().zip(matches.chars()).filter_map(|(g, m)| if "yg".contains(m) {Some(g)} else {None} ).collect();
-    let correct: String = guess.chars().zip(matches.chars()).map(|(g,m)| if m == 'g' {g} else {' '}).collect();
-    let neg_locate: String = guess.chars().zip(matches.chars()).map(|(g,m)| if m == 'y' {g} else {' '}).collect();
 
-    Ok(Response::new(&correct, &inc, &exc, vec!(neg_locate)))
+    Ok(SResponse::new(&vec!(Guess::new(&guess,&reply))))
 }
 
 
 #[cfg(test)]
 mod tests {
-    use std::{iter::Map, cmp::Reverse};
 
     use super::*;
     #[test]
@@ -533,120 +547,32 @@ mod tests {
 
 
 fn main() {
-    println!("Hello, world!");
+    println!("Reading files!");
     let filename = "sgb-words.txt";
-
-    static ASCII_LOWER: [char; 26] = [
-        'a', 'b', 'c', 'd', 'e',
-        'f', 'g', 'h', 'i', 'j',
-        'k', 'l', 'm', 'n', 'o',
-        'p', 'q', 'r', 's', 't',
-        'u', 'v', 'w', 'x', 'y',
-        'z',
-    ];
-
-
-    let target_word = "sugar";
-
-    let guess: Vec<_> = "apple".chars().collect();
-
-
-
-
-
-
-    // let letters_inc: Vec<_> = "".chars().collect();
-    // let letters_exc: Vec<_> = "".chars().collect();
-    // let matches: Vec<_> = "".chars().collect();
-
-    // // if validate(&HashSet::from_iter(letters_inc), &HashSet::from_iter(letters_exc)) {
-    // if validate(&letters_inc, &letters_exc) {
-    //     println!("Was valid");
-    // } else {
-    //     println!("Was invalid");
-    // }
-
 
     if let Ok(words) = lines_from_file(filename) {
         println!("There are {} lines in file", words.len());
-        let mut response = Response::new("     ", "", "", vec!());
+        let mut response = SResponse::new(&vec!());
 
         while(true) {
-            // let response = Response::new("     ", "", "", Vec::new());
+
             match input_response() {
                 Ok(ir) => response = response+&ir,
                 Err(err_msg) => println!("Failed to process response with error: {}", err_msg),
             }
             println!("Response is {:?}", response);
 
-
-
             let scored = score(&words, &response);
-            let guess_correct = top_correct(&scored, 20);
-            let guess_matches = top_matches(&scored, 20);
 
-            println!("Correct: {:?}", guess_correct);
-            println!("Matches: {:?}", guess_matches);
-            println!("Rejected: {:?}", top_rejected(&scored, 20));
+
+            println!("Green: {:?}", scored.iter().sorted_by_key(|(_word, score)| score.green  ).rev().take(10).collect::<Vec<_>>());
+            println!("Inc: {:?}", scored.iter().sorted_by_key(|(_word, score)| score.inc_letters  ).rev().take(10).collect::<Vec<_>>());
+            println!("Exc: {:?}", scored.iter().sorted_by_key(|(_word, score)| score.exc_letters  ).rev().take(10).collect::<Vec<_>>());
+            println!("Rej: {:?}", scored.iter().sorted_by_key(|(_word, score)| score.rejected_words  ).rev().take(10).collect::<Vec<_>>());
 
         }
     }
 
-    //     // Work out how many words include each letter
-    //     let residual : HashMap<_, _>= ASCII_LOWER.iter().map(|f| {
-    //         (
-    //             f,
-    //             lines.iter()
-    //                 .filter(|word| word.contains(*f))
-    //                 .count()
-    //             // format!("letter-{}", f)
-    //         )
-    //     }).collect();
-
-    //     println!("Words remaining after elimination = {:?}", residual);
-
-    //     // Work out which words eliminate the most other words
-
-    //     // let lines: Vec<_> = vec!("mol", "vol", "tol", "bra", "cha").iter().map(|&s| s.into()).collect();
-
-
-
-    //     let subset = subset_words(&lines, &letters_inc, &letters_exc);
-    //     println!("There are {} words", subset.len());
-
-    //     let options: Vec<_> = subset.iter().filter(|&word|
-    //         word.chars().enumerate().any(|(index, letter)| letter == matches[index] )
-    //     ).collect();
-    //     println!("There are {} options: {:?}", options.len(), options);
-
-
-    //     let mut residual : Vec<_> = subset.iter()
-    //         .map(|word| {
-    //             // For each word in list return word and count of words matching
-    //             (
-    //                 word,
-    //                 options.iter().filter(|wordsearch| {
-    //                     word.chars().any(|letter| wordsearch.contains(letter))
-    //                 }).count()
-    //             )
-    //         }).collect();
-    //     residual.sort_by_key(|value1| value1.1);
-    //     println!("Words remaining after elimination = {:?}", residual);
-    //}
-
-
-
-    // Work out how many words are eliminated by each letter
-
-
-
-    // if let Ok(lines) = read_lines(filename) {
-    //     for line in lines {
-    //         if let Ok(word) = line {
-    //             println!("{}", word);
-    //         }
-    //     }
-    // }
 }
 
 fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<String>> {
@@ -655,10 +581,4 @@ fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<String>> {
     Ok(buf.lines()
         .map(|l| l.expect("Could not parse line"))
         .collect())
-}
-
-fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-where P: AsRef<Path>, {
-    let file = File::open(filename)?;
-    Ok(io::BufReader::new(file).lines())
 }
