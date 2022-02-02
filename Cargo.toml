@@ -2,9 +2,24 @@
 name = "wordle"
 version = "0.1.0"
 edition = "2021"
+authors = ["Ben Greene <BenJGreene@gmail.com>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 itertools = "~0.10.0"
 rayon = "~1.5"
+
+
+[dev-dependencies]
+criterion = { version = "~0.3", features = [ "html_reports"] }
+
+
+# [bin]
+# name = "uservicestart"
+
+
+
+[[bench]]
+name = "score"
+harness = false
