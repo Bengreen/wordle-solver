@@ -1,7 +1,9 @@
 
+
+#![feature(portable_simd)]
+
 use itertools::Itertools;
 use wordle::{lines_from_file, SResponse, score, Guess};
-
 
 
 
@@ -58,7 +60,7 @@ fn main() {
     let filename = "sgb-words.txt";
 
     if let Ok(words) = lines_from_file(filename) {
-        println!("There are {} lines in file", words.len());
+        println!("There are {} words in file", words.len());
         let mut response = SResponse::new(&vec!());
 
         loop {
