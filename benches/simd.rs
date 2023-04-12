@@ -25,6 +25,19 @@ fn compare_simd(word: &str, letter: char) -> bool {
     true
 }
 
+fn filter_letter(words: &Vec<String>, letter: char) -> Vec<String> {
+    words.iter().filter_map(|word| {
+        if word.contains(letter) {Some(word.clone())} else {None}
+    }
+).collect()
+}
+
+fn filter_out_letter(words: &Vec<String>, letter: char) -> Vec<String> {
+    words.iter().filter_map(|word| {
+        if !word.contains(letter) {Some(word.clone())} else {None}
+    }
+).collect()
+}
 
 
 fn bench_filter(c: &mut Criterion) {
@@ -32,15 +45,21 @@ fn bench_filter(c: &mut Criterion) {
 
     let words = lines_from_file(filename).expect("load dict words");
 
-    let words_simd = word_to_simdwordle(words);
+    let words_simd = word_to_simdwordle(words.clone());
 
-    let my_filter = WordleFilter::new();
-    let my_filter = my_filter + SimdWordle::from("aaaaaaaa");
+    let my_in_filter = WordleFilter::new() + SimdWordle::from("aaaaaaaa");
+    let my_out_filter = WordleFilter::new() - SimdWordle::from("aaaaaaaa");
 
     let mut group = c.benchmark_group("Contains");
 
+    let my_letter = 'a';
+
     // group.bench_function("string_contains", |b| b.iter(|| compare_str(black_box(&word), black_box(letter))));
-    group.bench_function("simd_contains", |b| b.iter(|| words_simd.simd_filter(black_box(&my_filter))));
+    group.bench_function("string_contains", |b| b.iter(|| filter_letter(black_box(&words), black_box(my_letter))));
+    group.bench_function("simd_contains", |b| b.iter(|| words_simd.simd_filter(black_box(&my_in_filter))));
+
+    group.bench_function("string_doesntcontains", |b| b.iter(|| filter_out_letter(black_box(&words), black_box(my_letter))));
+    group.bench_function("simd_doesntcontains", |b| b.iter(|| words_simd.simd_filter(black_box(&my_out_filter))));
 
     group.finish();
 

@@ -16,13 +16,12 @@
    For each given wordle it could be check for all words available (not just those in remaining wordles) and identify how much
    information will be given by each guess.
 
-
 */
 
 use std::{
     fmt::{self, Display},
     ops::{self, Deref, DerefMut},
-    simd::{u8x8, Simd, SimdPartialEq},
+    simd::{u8x8, Simd, SimdPartialEq, Mask, mask8x8},
 };
 
 #[derive(Debug, PartialEq)]
@@ -30,14 +29,39 @@ pub struct SimdLetter {
     pub data: Simd<u8, 8>,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Hash, Eq)]
 pub struct SimdWordle {
     pub data: Simd<u8, 8>,
 }
 
+impl SimdWordle {
+    fn answer_for_guess(&self, guess: SimdWordle) -> SimdAnswer {
+        let green = self.data.simd_eq(guess.data);
+        // println!("Green = {:?}", green);
+        // let mut my_array: [u8; 8] = [NONE; 8];
+
+        let yellow = u8x8::splat(YELLOW);
+        let black = u8x8::splat(BLACK);
+
+        let yellow_mask: [bool;8] = guess.data.as_array().iter().map(|&letter| {
+            // println!("{}/{} = {:?}", self, letter, self.data.simd_eq(u8x8::splat(letter)));
+            self.data.simd_eq(u8x8::splat(letter)).any()
+        }).collect::<Vec<_>>().try_into().unwrap();
+
+        let yel_mask = mask8x8::from(yellow_mask);
+
+        // println!("yellow mask = {:?}", yellow_mask);
+
+        let myreply = green.select(u8x8::splat(GREEN), yel_mask.select(yellow, black));
+
+
+        SimdAnswer { data: myreply }
+    }
+}
+
 impl From<&str> for SimdWordle {
     fn from(item: &str) -> Self {
-        let temp_padded = format!("{:_<8}", item);
+        let temp_padded = format!("{:*<8}", item);
         SimdWordle {
             data: u8x8::from_slice(temp_padded.as_bytes()),
         }
@@ -95,20 +119,67 @@ impl Deref for WordleVec {
     }
 }
 
+impl<S: Into<String>> From<Vec<S>> for WordleVec {
+    fn from(words: Vec<S>) -> Self {
+        WordleVec(
+            words
+                .into_iter()
+                .map(|word| {
+                    // let temp_string : String= word.into();
+                    word.into().as_str().into()
+                })
+                .collect(),
+        )
+    }
+}
+
+#[deprecated(since = "0.2.0", note = "please use `WordleVec::into()` instead")]
+pub fn word_to_simdwordle<S: Into<String>>(words: Vec<S>) -> WordleVec {
+    WordleVec(
+        words
+            .into_iter()
+            .map(|word| {
+                // let temp_string : String= word.into();
+                word.into().as_str().into()
+            })
+            .collect(),
+    )
+}
+
 const YELLOW: u8 = 'y' as u8;
 const GREEN: u8 = 'g' as u8;
 const BLACK: u8 = 'b' as u8;
 const NONE: u8 = '_' as u8;
 const ANY: u8 = '*' as u8;
-// const YELLOW_SIMD: Simd<u8,8> =Simd::from([YELLOW;8]);
-// const GREEN_SIMD: Simd<u8,8> = u8x8::splat(GREEN);
-// const BLACK_SIMD: Simd<u8,8> = u8x8::splat(BLACK);
-// const BLANK_SIMD: Simd<u8,8> = u8x8::splat(BLANK);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct SimdAnswer {
     pub data: Simd<u8, 8>,
 }
+
+impl From<&SimdAnswer> for String {
+    fn from(value: &SimdAnswer) -> Self {
+        let byte_array = value.data.to_array();
+
+        // let without_padding: Vec<_> = byte_array.into_iter()
+        //     .filter(|letter| *letter != '_' as u8)
+        //     .collect();
+
+        let string = std::str::from_utf8(&byte_array).unwrap().to_owned();
+        string
+    }
+}
+
+
+impl fmt::Display for SimdAnswer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // let byte_array = self.data.to_array();
+        // let string = std::str::from_utf8(&byte_array).unwrap().to_owned();
+        let string: String = self.into();
+        write!(f, "{}", string)
+    }
+}
+
 
 impl From<&str> for SimdAnswer {
     fn from(item: &str) -> Self {
@@ -350,6 +421,8 @@ impl BitCodedFunctions for WordleVec {
                 }
             })
             .collect();
+        let positive_all = WordleVec(positive_all);
+        // println!("positive_all output = {}", positive_all);
 
         let positive: Vec<_> = positive_all
             .iter()
@@ -401,31 +474,123 @@ impl BitCodedFunctions for WordleVec {
     }
 
     fn information_required(&self) -> f64 {
-        todo!()
+        f64::from(u32::try_from(self.len()).unwrap()).log2()
     }
-}
-
-pub fn word_to_simdwordle<S: Into<String>>(words: Vec<S>) -> WordleVec {
-    WordleVec(words
-        .into_iter()
-        .map(|word| {
-            // let temp_string : String= word.into();
-            word.into().as_str().into()
-        })
-        .collect())
 }
 
 #[cfg(test)]
 mod simd_tests {
     use std::{
         mem,
-        simd::{u8x8, Simd, SimdPartialEq},
+        simd::{u8x8, Simd, SimdPartialEq}, collections::HashMap,
     };
 
     use crate::lines_from_file;
+    use rand::distributions::{Distribution, Uniform};
 
     use super::*;
+    #[test]
+    fn test_extract_guess() {
 
+        let target_word = SimdWordle::from("wahoo");
+        let guess_word = SimdWordle::from("goner");
+
+        // awoke, snout, wound
+        let answer = target_word.answer_for_guess(guess_word);
+
+        println!("{}/{} = {}", target_word, guess_word, answer);
+    }
+
+    fn max_b<K, V>(a_hash_map: &HashMap<K, V>) -> Option<&K>
+    where
+        V: PartialOrd,
+    {
+        a_hash_map
+            .iter()
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .map(|(k, _v)| k)
+    }
+
+    #[test]
+    fn test_informationmeasure() {
+        const NUM_WORDS: usize=400;
+
+        let words = lines_from_file("sgb-words.txt").unwrap();
+
+        // let words_wv: WordleVec = words.into();
+
+        println!("There are {} words", words.len());
+
+        let mut rng = rand::thread_rng();
+        let die = Uniform::from(0..words.len());
+
+        let mut subwords = vec![];
+        while subwords.len() < NUM_WORDS {
+            let choice = die.sample(&mut rng);
+
+            let new_word = words[choice].clone();
+            if !subwords.contains(&new_word) {
+                subwords.push(new_word);
+            }
+        }
+
+        println!("Have now got {} words: {:?}", subwords.len(), subwords);
+        let wv: WordleVec = subwords.into();
+        let initial_info_bits = wv.information_required();
+        println!("Have now got {} words: {} need {} information bits", wv.len(), wv, initial_info_bits);
+
+
+        let self_answer = wv[0].answer_for_guess(wv[0]);
+
+        println!("self answer for <{} -> {}> = {}", wv[0], wv[0], self_answer);
+
+        let my_answer = wv[0].answer_for_guess(wv[1]);
+
+        println!("     answer for <{} -> {}> = {}", wv[0], wv[1], my_answer);
+
+
+        let mut info_count: HashMap<SimdWordle, f64> = HashMap::new();
+
+        for target_word in wv.iter() {
+            info_count.insert(*target_word, 0.0);
+        }
+
+        for target_word in wv.iter() {
+            // println!("Searching for word: {}", target_word);
+            for guess_word in wv.iter() {
+                // println!("Attempting guess: {}", guess_word);
+                let my_filter= WordleFilter::new();
+
+                let answer = target_word.answer_for_guess(*guess_word);
+
+                let my_answer = SimdGuess{guess: *guess_word, reply: answer.clone()};
+                let my_filter = my_filter+my_answer;
+                // println!("Filter = {}", my_filter);
+
+                let filtered_words = wv.simd_filter(&my_filter);
+
+                let new_info_bits = filtered_words.information_required();
+                *info_count.get_mut(guess_word).unwrap() += new_info_bits;
+                // println!("Target: {} guessing {} => {} [{}] .. {}", target_word, guess_word, answer, filtered_words.len(), initial_info_bits-new_info_bits);
+            }
+        }
+
+        println!("Sum of guesses = {:?}", info_count);
+        let best_guess = max_b(&info_count).unwrap();
+
+        println!("Best guess was {}", *best_guess);
+
+
+    }
+
+    #[test]
+    fn test_wordlevec() {
+        let my_words = vec!["maple", "apple", "bread", "mouth"];
+
+        let my_wv: WordleVec = my_words.into();
+
+        println!("My wordlevec = {}", my_wv);
+    }
     #[test]
     fn test_filter() {
         let my_words = WordleVec(vec![
@@ -435,44 +600,43 @@ mod simd_tests {
             SimdWordle::from("mouth"),
         ]);
 
-
         let my_filter = WordleFilter::new();
         println!("Filter = {}", my_filter);
         let filtered_words = my_words.simd_filter(&my_filter);
-        assert_eq!(filtered_words, WordleVec(vec!(
-            SimdWordle::from("maple"),
-            SimdWordle::from("apple"),
-            SimdWordle::from("bread"),
-            SimdWordle::from("mouth"),
-        )),);
+        assert_eq!(
+            filtered_words,
+            WordleVec(vec!(
+                SimdWordle::from("maple"),
+                SimdWordle::from("apple"),
+                SimdWordle::from("bread"),
+                SimdWordle::from("mouth"),
+            )),
+        );
 
         let my_filter = my_filter - SimdWordle::from("bbbbbbbb");
         println!("Subtracted Filter = {}", my_filter);
         let filtered_words = my_words.simd_filter(&my_filter);
-        assert_eq!(filtered_words, WordleVec(vec!(
-            SimdWordle::from("maple"),
-            SimdWordle::from("apple"),
-            SimdWordle::from("mouth"),
-        )),);
-
-
+        assert_eq!(
+            filtered_words,
+            WordleVec(vec!(
+                SimdWordle::from("maple"),
+                SimdWordle::from("apple"),
+                SimdWordle::from("mouth"),
+            )),
+        );
 
         let my_filter = my_filter + SimdWordle::from("aaaaaaaa");
         println!("Added Filter = {}", my_filter);
         let filtered_words = my_words.simd_filter(&my_filter);
-        assert_eq!(filtered_words, WordleVec(vec!(
-            SimdWordle::from("maple"),
-            SimdWordle::from("apple"),
-        )),);
+        assert_eq!(
+            filtered_words,
+            WordleVec(vec!(SimdWordle::from("maple"), SimdWordle::from("apple"),)),
+        );
 
         let my_filter = my_filter * SimdWordle::from("a*******");
         println!("Mul Filter = {}", my_filter);
         let filtered_words = my_words.simd_filter(&my_filter);
-        assert_eq!(filtered_words, WordleVec(vec!(
-            SimdWordle::from("apple"),
-        )),);
-
-
+        assert_eq!(filtered_words, WordleVec(vec!(SimdWordle::from("apple"),)),);
     }
 
     #[test]

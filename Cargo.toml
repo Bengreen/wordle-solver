@@ -8,6 +8,7 @@ authors = ["Ben Greene <BenJGreene@gmail.com>"]
 
 [dependencies]
 itertools = "~0.10.0"
+rand = "0.8.5"
 rayon = "~1.5"
 
 
