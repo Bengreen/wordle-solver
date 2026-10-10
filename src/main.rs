@@ -1,7 +1,7 @@
 #![feature(portable_simd)]
 
 use itertools::Itertools;
-use wordle::{lines_from_file, SResponse, score, Guess};
+use wordle::{lines_from_file, SResponse, score, calculate_entropies, Guess};
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
 
@@ -85,12 +85,22 @@ fn main() {
                         .unwrap()
                         .progress_chars("#>-"),
                 );
-                pb.set_message("Calculating best guesses...");
+                pb.set_message("Calculating best guesses and entropies...");
                 pb.enable_steady_tick(std::time::Duration::from_millis(100));
 
+                // Calculate entropies (from master)
+                let mut entropies = calculate_entropies(&words, &response);
+                entropies.sort_by(|a, b| {
+                    b.1.partial_cmp(&a.1)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| b.2.cmp(&a.2))
+                });
+
+                // Calculate scores (from simd branch)
                 let scored = score(&words, &response, Some(&pb));
                 pb.finish_and_clear();
 
+                println!("Entropy: {:?}", entropies.iter().take(10).collect::<Vec<_>>());
                 println!("Top 10 by Green Matches: {:?}", scored.iter().sorted_by_key(|(_word, score)| score.green).rev().take(10).collect::<Vec<_>>());
                 println!("Top 10 by Included Letters: {:?}", scored.iter().sorted_by_key(|(_word, score)| score.inc_letters).rev().take(10).collect::<Vec<_>>());
                 println!("Top 10 by Excluded Letters: {:?}", scored.iter().sorted_by_key(|(_word, score)| score.exc_letters).rev().take(10).collect::<Vec<_>>());

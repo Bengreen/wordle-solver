@@ -343,6 +343,37 @@ mod tests0 {
 }
 
 
+use std::collections::HashMap;
+
+pub fn calculate_entropies(words: &[String], response: &SResponse) -> Vec<(String, f64, bool)> {
+    let active_words = subset_words(words, response);
+    let num_active = active_words.len() as f64;
+
+    if active_words.is_empty() {
+        return words.iter().map(|w| (w.clone(), 0.0, false)).collect();
+    }
+
+    words.par_iter()
+        .map(|guess_word| {
+            let mut pattern_counts: HashMap<String, usize> = HashMap::new();
+
+            for target_word in &active_words {
+                let guess = Guess::from_target(target_word, guess_word);
+                *pattern_counts.entry(guess.reply).or_insert(0) += 1;
+            }
+
+            let mut entropy = 0.0;
+            for count in pattern_counts.values() {
+                let p = (*count as f64) / num_active;
+                entropy -= p * p.log2();
+            }
+
+            let is_candidate = active_words.contains(guess_word);
+            (guess_word.clone(), entropy, is_candidate)
+        })
+        .collect()
+}
+
 /// Return a score for all words as used to split/solve the list of active words (worked out from Response)
 pub fn score(words: &Vec<String>, response: &SResponse, pb: Option<&indicatif::ProgressBar>) -> Vec<(String, Score,)> {
     let active_words = subset_words(&words, response);
