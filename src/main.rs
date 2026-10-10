@@ -1,6 +1,5 @@
 #![feature(portable_simd)]
 
-use itertools::Itertools;
 use wordle::{lines_from_file, SResponse, score, calculate_entropies, Guess};
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -16,6 +15,10 @@ struct Cli {
     /// Initial guess to start the solver with
     #[arg(short, long)]
     guess: Option<String>,
+
+    /// Test/demo mode: provide the target answer upfront, and it will automatically score the colors for your guesses.
+    #[arg(short, long)]
+    answer: Option<String>,
 }
 
 static WORD_LENGTH: usize = 5;
@@ -72,6 +75,10 @@ fn main() {
         let mut response = SResponse::new(&vec![]);
         let mut initial_guess = cli.guess;
 
+        if let Some(ref ans) = cli.answer {
+            println!("Demo mode active! Target answer is set to: '{}'", ans);
+        }
+
         loop {
             // Determine the next guess. Use initial guess if provided, otherwise calculate suggestions.
             let guess_str = if let Some(g) = initial_guess.take() {
@@ -100,12 +107,20 @@ fn main() {
                 let scored = score(&words, &response, Some(&pb));
                 pb.finish_and_clear();
 
-                println!("Entropy: {:?}", entropies.iter().take(10).collect::<Vec<_>>());
-                println!("Top 10 by Green Matches: {:?}", scored.iter().sorted_by_key(|(_word, score)| score.green).rev().take(10).collect::<Vec<_>>());
-                println!("Top 10 by Included Letters: {:?}", scored.iter().sorted_by_key(|(_word, score)| score.inc_letters).rev().take(10).collect::<Vec<_>>());
-                println!("Top 10 by Excluded Letters: {:?}", scored.iter().sorted_by_key(|(_word, score)| score.exc_letters).rev().take(10).collect::<Vec<_>>());
-                println!("Top 10 by Rejected Words: {:?}", scored.iter().sorted_by_key(|(_word, score)| score.rejected_words).rev().take(10).collect::<Vec<_>>());
-                println!();
+                let score_map: std::collections::HashMap<_, _> = scored.iter().map(|(w, s)| (w, s)).collect();
+
+                println!("\n🌟 Top Recommended Guesses:");
+                println!("{:-<75}", "");
+                println!("{:<10} | {:<10} | {:<12} | {:<12} | {:<12}", "Word", "Entropy", "Eliminates", "Green Score", "Possible Ans?");
+                println!("{:-<75}", "");
+
+                for (word, entropy, is_possible) in entropies.iter().take(10) {
+                    let sc = score_map.get(word).unwrap();
+                    let possible_str = if *is_possible { "✓ Yes" } else { "✗ No" };
+                    println!("{:<10} | {:<10.3} | {:<12} | {:<12} | {:<12}",
+                             word, entropy, sc.rejected_words, sc.green, possible_str);
+                }
+                println!("{:-<75}\n", "");
 
                 // Prompt user for their guess
                 loop {
@@ -116,15 +131,33 @@ fn main() {
                 }
             };
 
-            // Prompt user for the result of that guess
-            loop {
-                match prompt_color(&guess_str) {
-                    Ok(ir) => {
-                        response = response + &ir;
-                        println!("Current Response Filter is {:?}", response);
-                        break;
+            // Calculate colors if answer is provided, otherwise prompt user
+            let ir = if let Some(ref ans) = cli.answer {
+                let g = Guess::from_target(ans, &guess_str);
+                println!("\n🤖 Auto-scoring guess '{}' against answer '{}'", guess_str, ans);
+                let ir = SResponse::new(&vec![g]);
+                ir
+            } else {
+                // Prompt user for the result of that guess
+                let mut temp = None;
+                loop {
+                    match prompt_color(&guess_str) {
+                        Ok(val) => {
+                            temp = Some(val);
+                            break;
+                        }
+                        Err(err_msg) => println!("Failed to process response with error: {}", err_msg),
                     }
-                    Err(err_msg) => println!("Failed to process response with error: {}", err_msg),
+                }
+                temp.unwrap()
+            };
+
+            response = response + &ir;
+
+            if let Some(ref ans) = cli.answer {
+                if guess_str == *ans {
+                    println!("\n🎉 You successfully solved it! The answer was '{}'.", ans);
+                    break;
                 }
             }
         }

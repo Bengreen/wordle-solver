@@ -68,7 +68,7 @@ impl Guess{
     pub fn new(guess: &str, reply: &str) -> Guess {
         Guess { guess: guess.to_string(), reply: reply.to_string()}
     }
-    fn from_target(target: &str, guess: &str) -> Guess {
+    pub fn from_target(target: &str, guess: &str) -> Guess {
         let reply = target.chars().zip(guess.chars()).map(|(t, g)| {
             if t==g {
                 'g'
