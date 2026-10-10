@@ -1,9 +1,17 @@
+#![feature(portable_simd)]
+#![feature(const_trait_impl)]
+
+
 use std::{fs::File, io::{BufReader, self, BufRead}, path::Path, ops, collections::HashSet};
 
 use itertools::{izip, Itertools};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use std::hash::Hash;
+
+mod bitwise_lib;
+pub mod simd_lib;
+
 
 
 pub fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<String>> {
@@ -95,6 +103,7 @@ impl Guess{
         // self.reply.chars().zip(self.chars()).zip(word.chars())
     }
 }
+
 #[derive(PartialEq, Eq, Debug)]
 pub struct SResponse{
     guesses: Vec<Guess>,
@@ -335,13 +344,13 @@ mod tests0 {
 
 
 /// Return a score for all words as used to split/solve the list of active words (worked out from Response)
-pub fn score(words: &Vec<String>, response: &SResponse) -> Vec<(String, Score,)> {
+pub fn score(words: &Vec<String>, response: &SResponse, pb: Option<&indicatif::ProgressBar>) -> Vec<(String, Score,)> {
     let active_words = subset_words(&words, response);
-    // println!("There are {} valid words left", active_words.len());
+    println!("There are {} valid words left", active_words.len());
 
-    // if active_words.len() < 20 {
-    //     println!("Active words: {:?}", active_words);
-    // }
+    if active_words.len() < 20 {
+        println!("Active words: {:?}", active_words);
+    }
 
     // Use all words as viable guesses
     words.par_iter()
@@ -362,7 +371,10 @@ pub fn score(words: &Vec<String>, response: &SResponse) -> Vec<(String, Score,)>
                     };
 
                     total= total + &score;
-                };
+                }
+                if let Some(p) = pb {
+                    p.inc(1);
+                }
             (guess_word.to_string(), total)
             }
         )

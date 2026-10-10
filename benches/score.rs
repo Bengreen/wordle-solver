@@ -33,11 +33,11 @@ fn bench_score(c: &mut Criterion) {
         let wordlist = words[0..i].to_vec();
         // Call to score function
         group.bench_with_input(BenchmarkId::new("Response-0", format_args!("{:?}", wordlist.len())), &wordlist,
-            |b, i| b.iter(|| score(i, &response0)));
+            |b, i| b.iter(|| score(i, &response0, None)));
         group.bench_with_input(BenchmarkId::new("Response-1", format_args!("{:?}", wordlist.len())), &wordlist,
-        |b, i| b.iter(|| score(i, &response1)));
+        |b, i| b.iter(|| score(i, &response1, None)));
         group.bench_with_input(BenchmarkId::new("Response-2", format_args!("{:?}", wordlist.len())), &wordlist,
-        |b, i| b.iter(|| score(i, &response2)));
+        |b, i| b.iter(|| score(i, &response2, None)));
     }
 
     group.finish();
