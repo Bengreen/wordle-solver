@@ -43,17 +43,23 @@ impl SimdWordle {
         let yellow = u8x8::splat(YELLOW);
         let black = u8x8::splat(BLACK);
 
-        let yellow_mask: [bool;8] = guess.data.as_array().iter().map(|&letter| {
-            // println!("{}/{} = {:?}", self, letter, self.data.simd_eq(u8x8::splat(letter)));
-            self.data.simd_eq(u8x8::splat(letter)).any()
-        }).collect::<Vec<_>>().try_into().unwrap();
+        let yellow_mask: [bool; 8] = guess
+            .data
+            .as_array()
+            .iter()
+            .map(|&letter| {
+                // println!("{}/{} = {:?}", self, letter, self.data.simd_eq(u8x8::splat(letter)));
+                self.data.simd_eq(u8x8::splat(letter)).any()
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
 
         let yel_mask = mask8x8::from(yellow_mask);
 
         // println!("yellow mask = {:?}", yellow_mask);
 
         let myreply = green.select(u8x8::splat(GREEN), yel_mask.select(yellow, black));
-
 
         SimdAnswer { data: myreply }
     }
@@ -170,7 +176,6 @@ impl From<&SimdAnswer> for String {
     }
 }
 
-
 impl fmt::Display for SimdAnswer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // let byte_array = self.data.to_array();
@@ -179,7 +184,6 @@ impl fmt::Display for SimdAnswer {
         write!(f, "{}", string)
     }
 }
-
 
 impl From<&str> for SimdAnswer {
     fn from(item: &str) -> Self {
@@ -481,8 +485,9 @@ impl BitCodedFunctions for WordleVec {
 #[cfg(test)]
 mod simd_tests {
     use std::{
+        collections::HashMap,
         mem,
-        simd::prelude::{u8x8, Simd, SimdPartialEq}, collections::HashMap,
+        simd::prelude::{u8x8, Simd, SimdPartialEq},
     };
 
     use crate::lines_from_file;
@@ -491,7 +496,6 @@ mod simd_tests {
     use super::*;
     #[test]
     fn test_extract_guess() {
-
         let target_word = SimdWordle::from("wahoo");
         let guess_word = SimdWordle::from("goner");
 
@@ -513,7 +517,7 @@ mod simd_tests {
 
     #[test]
     fn test_informationmeasure() {
-        const NUM_WORDS: usize=400;
+        const NUM_WORDS: usize = 400;
 
         let words = lines_from_file("sgb-words.txt").unwrap();
 
@@ -537,8 +541,12 @@ mod simd_tests {
         println!("Have now got {} words: {:?}", subwords.len(), subwords);
         let wv: WordleVec = subwords.into();
         let initial_info_bits = wv.information_required();
-        println!("Have now got {} words: {} need {} information bits", wv.len(), wv, initial_info_bits);
-
+        println!(
+            "Have now got {} words: {} need {} information bits",
+            wv.len(),
+            wv,
+            initial_info_bits
+        );
 
         let self_answer = wv[0].answer_for_guess(wv[0]);
 
@@ -547,7 +555,6 @@ mod simd_tests {
         let my_answer = wv[0].answer_for_guess(wv[1]);
 
         println!("     answer for <{} -> {}> = {}", wv[0], wv[1], my_answer);
-
 
         let mut info_count: HashMap<SimdWordle, f64> = HashMap::new();
 
@@ -559,12 +566,15 @@ mod simd_tests {
             // println!("Searching for word: {}", target_word);
             for guess_word in wv.iter() {
                 // println!("Attempting guess: {}", guess_word);
-                let my_filter= WordleFilter::new();
+                let my_filter = WordleFilter::new();
 
                 let answer = target_word.answer_for_guess(*guess_word);
 
-                let my_answer = SimdGuess{guess: *guess_word, reply: answer.clone()};
-                let my_filter = my_filter+my_answer;
+                let my_answer = SimdGuess {
+                    guess: *guess_word,
+                    reply: answer.clone(),
+                };
+                let my_filter = my_filter + my_answer;
                 // println!("Filter = {}", my_filter);
 
                 let filtered_words = wv.simd_filter(&my_filter);
@@ -579,8 +589,6 @@ mod simd_tests {
         let best_guess = max_b(&info_count).unwrap();
 
         println!("Best guess was {}", *best_guess);
-
-
     }
 
     #[test]
