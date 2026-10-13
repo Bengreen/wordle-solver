@@ -1,34 +1,31 @@
-
 /* Information Theory with bitwise character operations
 
-    Use Shannon Theory to work out the best moves
-    https://www.quantamagazine.org/how-math-can-improve-your-wordle-score-20220525/
+   Use Shannon Theory to work out the best moves
+   https://www.quantamagazine.org/how-math-can-improve-your-wordle-score-20220525/
 
 
-    Information = log2(1/probability)
+   Information = log2(1/probability)
 
 
-    So the information we require to know the answer is log2(count of possibilities)
+   So the information we require to know the answer is log2(count of possibilities)
 
 
-    So how do we work out the bet guess to make.
+   So how do we work out the bet guess to make.
 
-    So for given list of remaining wordles:
-    For each given wordle it could be check for all words available (not just those in remaining wordles) and identify how much
-    information will be given by each guess.
-
-
-
+   So for given list of remaining wordles:
+   For each given wordle it could be check for all words available (not just those in remaining wordles) and identify how much
+   information will be given by each guess.
 
 
 
- */
 
+
+
+*/
 
 const BITS_PER_CHAR: usize = 5;
-const LETTER_MASK: u32 = (1<<BITS_PER_CHAR)-1;
-const MULVAL: u32 = 1 | 1<<5 | 1<<10 | 1<<15 | 1<<20;
-
+const LETTER_MASK: u32 = (1 << BITS_PER_CHAR) - 1;
+const MULVAL: u32 = 1 | 1 << 5 | 1 << 10 | 1 << 15 | 1 << 20;
 
 #[derive(Debug, PartialEq)]
 pub struct BitCodedLetter {
@@ -37,23 +34,22 @@ pub struct BitCodedLetter {
 
 impl From<char> for BitCodedLetter {
     fn from(item: char) -> Self {
-        BitCodedLetter { data: (item as u32) - ('a' as u32)+1 }
+        BitCodedLetter {
+            data: (item as u32) - ('a' as u32) + 1,
+        }
     }
 }
 
 impl From<BitCodedLetter> for char {
     fn from(item: BitCodedLetter) -> Self {
-        char::from_u32(item.data + ('a' as u32) -1).unwrap()
+        char::from_u32(item.data + ('a' as u32) - 1).unwrap()
     }
 }
-
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BitCodedWordle {
     pub data: u32,
 }
-
 
 impl BitCodedWordle {
     pub fn new<S: Into<String>>(word: S) -> BitCodedWordle {
@@ -64,8 +60,10 @@ impl BitCodedWordle {
         mycoded
     }
     fn letter(&self, index: usize) -> BitCodedLetter {
-        let temp = self.data>>(index* BITS_PER_CHAR);
-        BitCodedLetter { data: temp&LETTER_MASK }
+        let temp = self.data >> (index * BITS_PER_CHAR);
+        BitCodedLetter {
+            data: temp & LETTER_MASK,
+        }
     }
     fn len(&self) -> usize {
         BITS_PER_CHAR
@@ -84,7 +82,6 @@ impl BitCodedWordle {
         // For each letter in word filter words that do not contain in other location
         // For each letter in word filter words that contain letter
 
-
         // Check if green matches in correct place
         // Check if yellow included but not in provided location
         // Check if black matches
@@ -94,10 +91,12 @@ impl BitCodedWordle {
 }
 impl From<&str> for BitCodedWordle {
     fn from(item: &str) -> Self {
-        if item.len() != 5 {panic!("Guess must be 5 chars, was {}", item.len())};
+        if item.len() != 5 {
+            panic!("Guess must be 5 chars, was {}", item.len())
+        };
         let mut bin_encoded: u32 = 0;
-        for (index, char ) in item.to_ascii_lowercase().chars().enumerate() {
-            bin_encoded |= BitCodedLetter::from(char).data<<(index*BITS_PER_CHAR);
+        for (index, char) in item.to_ascii_lowercase().chars().enumerate() {
+            bin_encoded |= BitCodedLetter::from(char).data << (index * BITS_PER_CHAR);
         }
         BitCodedWordle { data: bin_encoded }
     }
@@ -122,10 +121,9 @@ trait BitCodedFunctions {
 
 impl BitCodedFunctions for Vec<BitCodedWordle> {
     fn filter(&self, guess: &BitCodedGuess) -> Vec<BitCodedWordle> {
-
         //Green filters
         // if green is not zero then use green as filter
-        let mut my_filter = vec!();
+        let mut my_filter = vec![];
 
         let green = guess.green_bitcoded();
         if green.data == 0 {
@@ -142,7 +140,7 @@ impl BitCodedFunctions for Vec<BitCodedWordle> {
 
         //Black filters
 
-        let mut result = vec!();
+        let mut result = vec![];
 
         for word in self {
             if word.matches(&guess) {
@@ -156,9 +154,7 @@ impl BitCodedFunctions for Vec<BitCodedWordle> {
     fn information_required(&self) -> f64 {
         f64::from(u32::try_from(self.len()).unwrap()).log2()
     }
-
 }
-
 
 #[derive(Debug, PartialEq)]
 struct BitCodedAnswer {
@@ -167,30 +163,28 @@ struct BitCodedAnswer {
 
 impl BitCodedAnswer {
     pub fn new<S: Into<String>>(reply: S) -> BitCodedAnswer {
-
         BitCodedAnswer::from(reply.into().as_str())
     }
 }
 
 impl From<&str> for BitCodedAnswer {
     fn from(item: &str) -> Self {
-        if item.len() != 5 {panic!("Guess must be 5 chars, was {}", item.len())};
+        if item.len() != 5 {
+            panic!("Guess must be 5 chars, was {}", item.len())
+        };
         let mut bin_encoded: u32 = 0;
-        for (index, char ) in item.to_ascii_lowercase().chars().enumerate() {
-
+        for (index, char) in item.to_ascii_lowercase().chars().enumerate() {
             let encoded_char = match char {
                 'g' => 3,
                 'y' => 1,
                 'b' => 0,
                 _ => panic!("Character is not valid in guess {}", char),
             };
-            bin_encoded |= encoded_char<<(index*BITS_PER_CHAR);
+            bin_encoded |= encoded_char << (index * BITS_PER_CHAR);
         }
         BitCodedAnswer { data: bin_encoded }
     }
 }
-
-
 
 #[derive(Debug, PartialEq)]
 struct BitCodedGuess {
@@ -203,52 +197,52 @@ impl BitCodedGuess {
         // let guess_string: String = guess.into();
         // let reply_string: String = reply.into();
 
-        BitCodedGuess{
+        BitCodedGuess {
             guess: BitCodedWordle::new(guess),
-            reply: BitCodedAnswer::new(reply)
+            reply: BitCodedAnswer::new(reply),
         }
     }
     pub fn green_bitcoded(&self) -> BitCodedWordle {
         // Mask out guess where replies are not green
-        let reply_mask_single = (self.reply.data>>1) & (1 | 1<<5 | 1<<10 | 1<<15 | 1<<20);
+        let reply_mask_single = (self.reply.data >> 1) & (1 | 1 << 5 | 1 << 10 | 1 << 15 | 1 << 20);
         let reply_mask = reply_mask_single * 0b11111u32; // 5 bits
 
-        BitCodedWordle { data: reply_mask & self.guess.data }
+        BitCodedWordle {
+            data: reply_mask & self.guess.data,
+        }
     }
     pub fn black_bitcoded(&self) -> Vec<BitCodedWordle> {
         // Mask out guess where replies are not yellow
-        let mut reply = vec!();
+        let mut reply = vec![];
 
         for index in 0..(BITS_PER_CHAR as u32) {
             // if (1<<(index*(BITS_PER_CHAR as u32)) & self.reply.data)==0 {
-            if (0b11u32 & (self.reply.data>>(index*(BITS_PER_CHAR as u32))))==0 {
-                reply.push(BitCodedWordle{data: MULVAL * (0b11111u32 & (self.guess.data>>(index*(BITS_PER_CHAR as u32))))});
+            if (0b11u32 & (self.reply.data >> (index * (BITS_PER_CHAR as u32)))) == 0 {
+                reply.push(BitCodedWordle {
+                    data: MULVAL
+                        * (0b11111u32 & (self.guess.data >> (index * (BITS_PER_CHAR as u32)))),
+                });
             }
         }
         reply
     }
     pub fn yellow_bitcoded(&self) -> Vec<BitCodedWordle> {
         // Mask out guess where replies are not yellow
-        let mut reply = vec!();
+        let mut reply = vec![];
 
         for index in 0..(BITS_PER_CHAR as u32) {
-            if (0b11u32 & (self.reply.data>>(index*(BITS_PER_CHAR as u32))))==1 {
-                reply.push(BitCodedWordle{data:
-                    (MULVAL ^ (1<<(index*(BITS_PER_CHAR as u32)))) * (0b11111u32 & (self.guess.data>>(index*(BITS_PER_CHAR as u32)))
-                )});
+            if (0b11u32 & (self.reply.data >> (index * (BITS_PER_CHAR as u32)))) == 1 {
+                reply.push(BitCodedWordle {
+                    data: (MULVAL ^ (1 << (index * (BITS_PER_CHAR as u32))))
+                        * (0b11111u32 & (self.guess.data >> (index * (BITS_PER_CHAR as u32)))),
+                });
             }
         }
         reply
-
     }
-
 }
 
-
-
-
 pub fn words_to_bitcodedwordle<S: Into<String>>(words: Vec<S>) -> Vec<BitCodedWordle> {
-
     words
         .into_iter()
         .map(|word| BitCodedWordle::new(word))
@@ -269,15 +263,13 @@ pub struct SResponse {
 //     }
 // }
 
-
 #[cfg(test)]
 mod bitwise_tests {
-    use std::simd::prelude::{Simd, u8x8, SimdPartialEq};
+    use std::simd::prelude::{u8x8, Simd, SimdPartialEq};
 
     use crate::lines_from_file;
 
     use super::*;
-
 
     #[test]
     fn test_simd() {
@@ -294,8 +286,7 @@ mod bitwise_tests {
 
         println!("v0={:?}, v1={:?}", v0, v1);
 
-
-        let a2: [u8;8] = [0,2,3,4,5,0,0,0];
+        let a2: [u8; 8] = [0, 2, 3, 4, 5, 0, 0, 0];
         let va = Simd::from(a2);
 
         let compare = u8x8::splat(4);
@@ -309,13 +300,13 @@ mod bitwise_tests {
     #[test]
     fn test_conversion() {
         let a: BitCodedLetter = 'a'.into();
-        assert_eq!(a.data,1, "a must be converted to 1");
+        assert_eq!(a.data, 1, "a must be converted to 1");
 
         let a_char: char = a.into();
         assert_eq!(a_char, 'a', "a converted back from 1");
 
         let z: BitCodedLetter = 'z'.into();
-        assert_eq!(z.data,26, "z must be converted to 27");
+        assert_eq!(z.data, 26, "z must be converted to 27");
 
         let z_char: char = z.into();
         assert_eq!(z_char, 'z', "z converted back from 26");
@@ -325,7 +316,7 @@ mod bitwise_tests {
     fn test_bitcodedanswer() {
         let ben = BitCodedAnswer::from("ggggg");
 
-        assert_eq!(ben.data,3247203);
+        assert_eq!(ben.data, 3247203);
     }
 
     #[test]
@@ -370,26 +361,28 @@ mod bitwise_tests {
 
         println!("Loaded {} words from file ", words.len());
 
-        let words_8bytes: Vec<_>= words.iter().map(|word| format!("{:0>8}", word)).collect();
+        let words_8bytes: Vec<_> = words.iter().map(|word| format!("{:0>8}", word)).collect();
 
-        let words_simd: Vec<_> = words_8bytes.iter().map(|word| {
-            let word_bytes = word.as_bytes();
-            u8x8::from_slice(word_bytes)
-        }).collect();
+        let words_simd: Vec<_> = words_8bytes
+            .iter()
+            .map(|word| {
+                let word_bytes = word.as_bytes();
+                u8x8::from_slice(word_bytes)
+            })
+            .collect();
 
         println!("num words = {}", words_simd.len());
 
         let letter = 'a';
         let letter_simd = u8x8::splat(letter as u8);
 
-
-        let words_with_a: Vec<_> = words_simd.iter().filter(|&word| word.simd_eq(letter_simd).any())
-        .collect();
+        let words_with_a: Vec<_> = words_simd
+            .iter()
+            .filter(|&word| word.simd_eq(letter_simd).any())
+            .collect();
 
         println!("There are {} words with the letter 'a'", words_with_a.len());
     }
-
-
 
     #[test]
     fn test_big_list() {
@@ -409,17 +402,18 @@ mod bitwise_tests {
             println!("NOT FOUND: {}", word);
         }
 
-
-        println!("Wordle requires {} bits of information", bitcoded_words.information_required());
+        println!(
+            "Wordle requires {} bits of information",
+            bitcoded_words.information_required()
+        );
 
         let my_guess = BitCodedGuess::new("apple", "ggbbb");
 
         let matching_words = bitcoded_words.filter(&my_guess);
-        println!("Guess result is of length {} so needs {} bits", matching_words.len(), matching_words.information_required());
-
-
-
+        println!(
+            "Guess result is of length {} so needs {} bits",
+            matching_words.len(),
+            matching_words.information_required()
+        );
     }
-
-
 }
